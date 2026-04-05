@@ -9,6 +9,7 @@ A lightweight fetch-based HTTP client focused on clear request flow and structur
 It provides:
 
 - clear request configuration
+- query string building
 - JSON request helpers
 - timeout support
 - structured error types
@@ -22,27 +23,28 @@ It provides:
 - FormData support
 - Request timeout support
 - Structured error handling
-- `request`, `requestJson`, `getJson`, `postJson`, `putJson`
+- Basic methods: `request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options`
+- JSON methods: `requestJson`, `getJson`, `postJson`, `putJson`
 
 ## Installation
 
 This project is currently under local development.
 
 ```sh
-  pnpm install
+pnpm install
 ```
 
 ## Development
 
 ```sh
-  pnpm test
-  pnpm lint
-  pnpm build
+pnpm test
+pnpm lint
+pnpm build
 ```
 
 ## Quick Start
 
-```js
+```ts
 import { HttpClient, HTTP_METHOD } from 'okxie-link'
 
 const http = new HttpClient({
@@ -59,47 +61,116 @@ const response = await http.request({
 })
 ```
 
+## Basic Methods
+
+### GET
+
+```ts
+const response = await http.get('/users', {
+  query: {
+    page: 1,
+  },
+})
+```
+
+### POST
+
+```ts
+const response = await http.post('/users', {
+  body: {
+    name: 'Tom',
+  },
+})
+```
+
+### PUT
+
+```ts
+const response = await http.put('/users/1', {
+  body: {
+    name: 'Jerry',
+  },
+})
+```
+
+### PATCH
+
+```ts
+const response = await http.patch('/users/1', {
+  body: {
+    name: 'Updated',
+  },
+})
+```
+
+### DELETE
+
+```ts
+const response = await http.delete('/users/1')
+```
+
+### HEAD
+
+```ts
+const response = await http.head('/users/1')
+```
+
+### OPTIONS
+
+```ts
+const response = await http.options('/users')
+```
+
 ## JSON API
 
-### GET JSON
+### `requestJson`
 
-```js
-  const user = await http.getJson<{ id: number; name: string }>('/users/1')
+```ts
+const user = await http.requestJson<{ id: number; name: string }>({
+  url: '/users/1',
+  method: HTTP_METHOD.GET,
+})
 ```
 
-### POST JSON
+### `getJson`
 
-```js
- const created = await http.postJson<{ id: number; name: string }>('/users', {
-    body: {
-      name: 'Tom',
-    },
-  })
+```ts
+const user = await http.getJson<{ id: number; name: string }>('/users/1')
 ```
 
-### PUT JSON
+### `postJson`
 
-```js
-  const updated = await http.putJson<{ id: number; name: string }>('/users/1', {
-    body: {
-      name: 'Jerry',
-    },
-  })
+```ts
+const created = await http.postJson<{ id: number; name: string }>('/users', {
+  body: {
+    name: 'Tom',
+  },
+})
+```
+
+### `putJson`
+
+```ts
+const updated = await http.putJson<{ id: number; name: string }>('/users/1', {
+  body: {
+    name: 'Jerry',
+  },
+})
 ```
 
 ## Error Types
 
-okxie-link provides structured error classes:
+`okxie-link` provides structured error classes:
 
-- HttpError
-- NetworkError
-- TimeoutError
-- AbortError
+- `HttpError`
+- `NetworkError`
+- `TimeoutError`
+- `AbortError`
 
 Example:
 
-```js
-import { HttpError, NetworkError, TimeoutError, AbortError } from 'okxie-link'
+```ts
+import { AbortError, HttpError, NetworkError, TimeoutError } from 'okxie-link'
 
 try {
   await http.getJson('/users/1')
@@ -118,12 +189,11 @@ try {
 
 ## Notes
 
-- request() returns Response
-- requestJson() returns parsed JSON
-- requestJson() returns undefined for 204 No Content
+- `request()` returns `Response`
+- `requestJson()` returns parsed JSON
+- `requestJson()` returns `undefined` for `204 No Content`
+- `getJson`, `postJson`, and `putJson` are shortcuts around `requestJson`
 
-  ## License
+## License
 
 MIT
-
----
