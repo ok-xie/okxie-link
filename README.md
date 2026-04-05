@@ -1,84 +1,64 @@
-# okxie-link
+ ```bash
+  pnpm install
 
-A lightweight fetch-based HTTP client.
+  ## Development
 
-## Features
+  pnpm test
+  pnpm lint
+  pnpm build
 
-- Built on top of native `fetch`
-- Supports `query` building
-- Supports JSON body serialization
-- Supports `FormData`
-- Supports request timeout
-- Distinguishes HTTP errors, network errors, timeout errors, and abort errors
-- Provides `request`, `requestJson`, `getJson`, `postJson`, `putJson`
+  ## Usage
 
-## Installation
+  import { HttpClient, HTTP_METHOD } from 'okxie-link'
 
-This project is currently under local development.
+  const http = new HttpClient({
+    baseUrl: 'https://api.example.com',
+    timeout: 5000,
+  })
 
-```bash
-pnpm install
+  const response = await http.request({
+    url: '/users',
+    method: HTTP_METHOD.GET,
+    query: {
+      page: 1,
+    },
+  })
 
-## Development
+  ### JSON Request
 
-pnpm test
-pnpm lint
-pnpm build
+  const user = await http.getJson<{ id: number; name: string }>('/users/1')
 
-## Usage
+  ### POST JSON
 
-import { HttpClient, HTTP_METHOD } from 'okxie-link'
+  const created = await http.postJson<{ id: number; name: string }>('/users', {
+    body: {
+      name: 'Tom',
+    },
+  })
 
-const http = new HttpClient({
-  baseUrl: 'https://api.example.com',
-  timeout: 5000,
-})
+  ## Error Handling
 
-const response = await http.request({
-  url: '/users',
-  method: HTTP_METHOD.GET,
-  query: {
-    page: 1,
-  },
-})
+  import {
+    HttpError,
+    NetworkError,
+    TimeoutError,
+    AbortError,
+  } from 'okxie-link'
 
-### JSON request
-
-const user = await http.getJson<{ id: number; name: string }>('/users/1')
-
-### POST JSON
-
-const created = await http.postJson<{ id: number; name: string }>('/users', {
-  body: {
-    name: 'Tom',
-  },
-})
-
-## Error Handling
-
-import {
-  HttpError,
-  NetworkError,
-  TimeoutError,
-  AbortError,
-} from 'okxie-link'
-
-try {
-  await http.getJson('/users/1')
-} catch (error) {
-  if (error instanceof TimeoutError) {
-    console.log('request timed out')
-  } else if (error instanceof AbortError) {
-    console.log('request aborted')
-  } else if (error instanceof HttpError) {
-    console.log(error.status)
-  } else if (error instanceof NetworkError) {
-    console.log(error.requestUrl)
+  try {
+    await http.getJson('/users/1')
+  } catch (error) {
+    if (error instanceof TimeoutError) {
+      console.log('request timed out')
+    } else if (error instanceof AbortError) {
+      console.log('request aborted')
+    } else if (error instanceof HttpError) {
+      console.log(error.status)
+    } else if (error instanceof NetworkError) {
+      console.log(error.requestUrl)
+    }
   }
-}
 
-## License
+  ## License
 
-MIT
-
-```
+  MIT
