@@ -1,7 +1,6 @@
 {
   "name": "okxie-link",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "",
   "main": "./dist/index.js",
@@ -11,6 +10,17 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ok-xie/okxie-link.git"
+  },
+  "homepage": "https://github.com/ok-xie/okxie-link#readme",
+  "bugs": {
+    "url": "https://github.com/ok-xie/okxie-link/issues"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
