@@ -1,17 +1,29 @@
 import type { BuildSignalResult, ClientConfig, QueryType, RequestConfig } from './types.js'
 
 export function buildUrl(baseUrl: string, url: string, query: QueryType) {
-  const urlObj = new URL(joinURL(baseUrl, url))
+  const joinedUrl = joinUrl(baseUrl, url)
+  const isAbsolute = /^https?:\/\//.test(joinedUrl)
+
+  const urlObj = isAbsolute ? new URL(joinedUrl) : new URL(joinedUrl, 'http://okxie-link.local')
+
   Object.keys(query).forEach((key) => {
-    if (query[key] === null || query[key] === undefined) {
+    const value = query[key]
+
+    if (value === null || value === undefined) {
       return
     }
-    urlObj.searchParams.set(key, query[key].toString())
+
+    urlObj.searchParams.set(key, String(value))
   })
-  return urlObj.toString()
+
+  if (isAbsolute) {
+    return urlObj.toString()
+  }
+
+  return `${urlObj.pathname}${urlObj.search}${urlObj.hash}`
 }
 
-export function joinURL(baseUrl: string, url: string) {
+export function joinUrl(baseUrl: string, url: string) {
   if (/^https?:\/\//.test(url)) {
     return url
   }

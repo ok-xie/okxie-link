@@ -33,6 +33,20 @@ describe('buildUrl', () => {
 
     expect(result).toBe('https://other.com/users?page=1')
   })
+  it('should support relative baseUrl for dev proxy', () => {
+    const result = buildUrl('/v0/api', '/auth', {})
+
+    expect(result).toBe('/v0/api/auth')
+  })
+
+  it('should support relative baseUrl with query params', () => {
+    const result = buildUrl('/v0/api', '/auth', {
+      username: 'admin',
+      page: 1,
+    })
+
+    expect(result).toBe('/v0/api/auth?username=admin&page=1')
+  })
 })
 
 describe('buildBody', () => {
