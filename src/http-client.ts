@@ -10,8 +10,9 @@ import {
   type PostRequestConfig,
   type PutRequestConfig,
   type RequestConfig,
+  type UploadRequestConfig,
 } from './types.js'
-import { buildBody, buildSignal, buildUrl } from './utils.js'
+import { appendUploadFile, buildBody, buildSignal, buildUrl, toFormData } from './utils.js'
 
 export class HttpClient {
   config: ClientConfig
@@ -135,6 +136,46 @@ export class HttpClient {
       ...config,
       url,
       method: HTTP_METHOD.PUT,
+    })
+  }
+
+  async upload(url: string, config: UploadRequestConfig = {}): Promise<Response> {
+    const { data, file, files, fileFieldName = files ? 'files' : 'file', formData, ...rest } = config
+    const body = toFormData(data ?? {}, formData ?? new FormData())
+
+    if (file) {
+      appendUploadFile(body, fileFieldName, file)
+    }
+
+    if (files) {
+      for (const currentFile of files) {
+        appendUploadFile(body, fileFieldName, currentFile)
+      }
+    }
+
+    return this.post(url, {
+      ...rest,
+      body,
+    })
+  }
+
+  async uploadJson<T>(url: string, config: UploadRequestConfig = {}): Promise<T | undefined> {
+    const { data, file, files, fileFieldName = files ? 'files' : 'file', formData, ...rest } = config
+    const body = toFormData(data ?? {}, formData ?? new FormData())
+
+    if (file) {
+      appendUploadFile(body, fileFieldName, file)
+    }
+
+    if (files) {
+      for (const currentFile of files) {
+        appendUploadFile(body, fileFieldName, currentFile)
+      }
+    }
+
+    return this.postJson<T>(url, {
+      ...rest,
+      body,
     })
   }
 }

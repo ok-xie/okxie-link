@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildBody, buildSignal, buildUrl } from '../src/utils.js'
+import { buildBody, buildSignal, buildUrl, toFormData } from '../src/utils.js'
 describe('buildUrl', () => {
   it('should append query params', () => {
     const result = buildUrl('https://api.example.com', '/users', {
@@ -161,5 +161,38 @@ describe('buildSignal', () => {
 
     expect(result.signal).toBeUndefined()
     expect(result.source).toBe('none')
+  })
+})
+
+describe('toFormData', () => {
+  it('should append scalar values as strings', () => {
+    const formData = toFormData({
+      userId: 123,
+      enabled: true,
+      createdAt: new Date('2026-04-12T08:00:00.000Z'),
+    })
+
+    expect(formData.get('userId')).toBe('123')
+    expect(formData.get('enabled')).toBe('true')
+    expect(formData.get('createdAt')).toBe('2026-04-12T08:00:00.000Z')
+  })
+
+  it('should append arrays as repeated keys and skip nullish values', () => {
+    const formData = toFormData({
+      tags: ['sdk', 'upload'],
+      ignored: [null, undefined, 'kept'],
+    })
+
+    expect(formData.getAll('tags')).toEqual(['sdk', 'upload'])
+    expect(formData.getAll('ignored')).toEqual(['kept'])
+  })
+
+  it('should append blobs without stringifying them', () => {
+    const file = new File(['avatar'], 'avatar.png', { type: 'image/png' })
+    const formData = toFormData({
+      file,
+    })
+
+    expect(formData.get('file')).toBe(file)
   })
 })

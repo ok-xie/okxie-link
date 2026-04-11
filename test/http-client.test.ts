@@ -296,6 +296,93 @@ describe('HttpClient json shortcut methods', () => {
   })
 })
 
+describe('HttpClient upload helpers', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('should build a multipart body with fields and a single file', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('ok', { status: 200 }))
+
+    const file = new File(['avatar'], 'avatar.png', { type: 'image/png' })
+    const client = new HttpClient({
+      baseUrl: 'https://api.example.com',
+    })
+
+    await client.upload('/upload', {
+      data: {
+        userId: 123,
+        tags: ['cover', 'profile'],
+      },
+      file,
+    })
+
+    const [, init] = fetchSpy.mock.calls[0]
+    const requestInit = init as RequestInit
+    const body = requestInit.body as FormData
+    const headers = new Headers(requestInit.headers)
+
+    expect(requestInit.method).toBe(HTTP_METHOD.POST)
+    expect(body).toBeInstanceOf(FormData)
+    expect(body.get('userId')).toBe('123')
+    expect(body.getAll('tags')).toEqual(['cover', 'profile'])
+    expect(body.get('file')).toBe(file)
+    expect(headers.get('Content-Type')).toBeNull()
+  })
+
+  it('should append multiple files under a custom field name', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('ok', { status: 200 }))
+
+    const fileA = new File(['a'], 'a.txt', { type: 'text/plain' })
+    const fileB = new File(['b'], 'b.txt', { type: 'text/plain' })
+    const client = new HttpClient({
+      baseUrl: 'https://api.example.com',
+    })
+
+    await client.upload('/upload', {
+      files: [fileA, fileB],
+      fileFieldName: 'attachments',
+    })
+
+    const [, init] = fetchSpy.mock.calls[0]
+    const requestInit = init as RequestInit
+    const body = requestInit.body as FormData
+
+    expect(body.getAll('attachments')).toEqual([fileA, fileB])
+  })
+
+  it('should parse uploadJson response as json', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ url: '/assets/avatar.png' }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    )
+
+    const file = new File(['avatar'], 'avatar.png', { type: 'image/png' })
+    const client = new HttpClient({
+      baseUrl: 'https://api.example.com',
+    })
+
+    const result = await client.uploadJson<{ url: string }>('/upload', {
+      file,
+      data: {
+        userId: 'u-1',
+      },
+    })
+
+    expect(result).toEqual({
+      url: '/assets/avatar.png',
+    })
+  })
+})
+
 describe('HttpClient.request error classification', () => {
   afterEach(() => {
     vi.restoreAllMocks()
