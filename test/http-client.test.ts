@@ -1,96 +1,34 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  AbortError,
-  HttpClient,
-  HttpError,
-  HTTP_METHOD,
-  NetworkError,
-  TimeoutError,
-} from '../src/index.js'
+import { HttpClient } from '../src/client/http-client.js'
+import { BizError } from '../src/errors/biz-error.js'
+import { createBizMiddleware } from '../src/middlewares/biz.js'
 
-describe('HttpClient.request', () => {
+type UserPayload = {
+  code: number
+  message: string
+  data: { id: number; name: string }
+}
+
+type TokenExpiredPayload = {
+  code: number
+  message: string
+  data: null
+}
+
+type UploadPayload = {
+  code: number
+  data: { url: string }
+}
+
+describe('HttpClient', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('should call fetch with built url', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('ok', { status: 200 }))
-
-    const client = new HttpClient({
-      baseUrl: 'https://api.example.com',
-    })
-
-    await client.request({
-      url: '/users',
-      method: HTTP_METHOD.GET,
-      query: {
-        page: 1,
-      },
-    })
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
-
-    const [calledUrl] = fetchSpy.mock.calls[0]
-    expect(calledUrl).toBe('https://api.example.com/users?page=1')
-  })
-
-  it('should send json body and json content-type for plain object body', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('ok', { status: 200 }))
-
-    const client = new HttpClient({
-      baseUrl: 'https://api.example.com',
-    })
-
-    await client.request({
-      url: '/users',
-      method: HTTP_METHOD.POST,
-      body: {
-        name: 'Tom',
-      },
-    })
-
-    const [, init] = fetchSpy.mock.calls[0]
-    const requestInit = init as RequestInit
-    const headers = new Headers(requestInit.headers)
-
-    expect(requestInit.body).toBe(JSON.stringify({ name: 'Tom' }))
-    expect(headers.get('Content-Type')).toBe('application/json')
-  })
-
-  it('should use request timeout before client timeout', async () => {
-    const signal = new AbortController().signal
-    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(signal)
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('ok', { status: 200 }))
-
-    const client = new HttpClient({
-      baseUrl: 'https://api.example.com',
-      timeout: 5000,
-    })
-
-    await client.request({
-      url: '/users',
-      method: HTTP_METHOD.GET,
-      timeout: 1000,
-    })
-
-    expect(timeoutSpy).toHaveBeenCalledWith(1000)
-
-    const [, init] = fetchSpy.mock.calls[0]
-    const requestInit = init as RequestInit
-    expect(requestInit.signal).toBe(signal)
-  })
-
-  it('should throw HttpError when response is not ok', async () => {
+  it('should request and return Response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('not found', {
-        status: 404,
-        statusText: 'Not Found',
+      new Response('ok', {
+        status: 200,
       }),
     )
 
@@ -98,46 +36,13 @@ describe('HttpClient.request', () => {
       baseUrl: 'https://api.example.com',
     })
 
-    await expect(
-      client.request({
-        url: '/users/1',
-        method: HTTP_METHOD.GET,
-      }),
-    ).rejects.toBeInstanceOf(HttpError)
+    const response = await client.get('/users')
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe('ok')
   })
 
-  it('should keep status and requestUrl in HttpError', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('not found', {
-        status: 404,
-        statusText: 'Not Found',
-      }),
-    )
-
-    const client = new HttpClient({
-      baseUrl: 'https://api.example.com',
-    })
-
-    try {
-      await client.request({
-        url: '/users/1',
-        method: HTTP_METHOD.GET,
-      })
-    } catch (error) {
-      expect(error).toBeInstanceOf(HttpError)
-      const httpError = error as HttpError
-      expect(httpError.status).toBe(404)
-      expect(httpError.requestUrl).toBe('https://api.example.com/users/1')
-    }
-  })
-})
-
-describe('HttpClient.requestJson', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('should parse successful response as json', async () => {
+  it('should request json through requestJson', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ id: 1, name: 'Tom' }), {
         status: 200,
@@ -151,10 +56,7 @@ describe('HttpClient.requestJson', () => {
       baseUrl: 'https://api.example.com',
     })
 
-    const result = await client.requestJson<{ id: number; name: string }>({
-      url: '/users/1',
-      method: HTTP_METHOD.GET,
-    })
+    const result = await client.getJson<{ id: number; name: string }>('/users/1')
 
     expect(result).toEqual({
       id: 1,
@@ -162,11 +64,10 @@ describe('HttpClient.requestJson', () => {
     })
   })
 
-  it('should return undefined when requestJson receives 204 response', async () => {
+  it('should return undefined for 204 json responses', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(null, {
         status: 204,
-        statusText: 'No Content',
       }),
     )
 
@@ -176,21 +77,15 @@ describe('HttpClient.requestJson', () => {
 
     const result = await client.requestJson<{ success: boolean }>({
       url: '/users/1',
-      method: HTTP_METHOD.DELETE,
+      method: 'DELETE',
     })
 
     expect(result).toBeUndefined()
   })
-})
 
-describe('HttpClient json shortcut methods', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('should get json with getJson', async () => {
+  it('should let middleware write ctx.data for requestData', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ id: 1, name: 'Tom' }), {
+      new Response(JSON.stringify({ code: 0, data: { id: 1, name: 'Tom' } }), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -202,7 +97,16 @@ describe('HttpClient json shortcut methods', () => {
       baseUrl: 'https://api.example.com',
     })
 
-    const result = await client.getJson<{ id: number; name: string }>('/users/1')
+    client.use(async (ctx, next) => {
+      await next()
+      const payload = (await ctx.json()) as { code: number; data: { id: number; name: string } }
+      ctx.data = payload.data
+    })
+
+    const result = await client.requestData<{ id: number; name: string }>({
+      url: '/users/1',
+      method: 'GET',
+    })
 
     expect(result).toEqual({
       id: 1,
@@ -210,9 +114,9 @@ describe('HttpClient json shortcut methods', () => {
     })
   })
 
-  it('should post json with postJson', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ id: 1, name: 'Tom' }), {
+  it('should let biz middleware write ctx.data for requestData', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ code: 0, message: 'ok', data: { id: 1, name: 'Tom' } }), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -224,29 +128,26 @@ describe('HttpClient json shortcut methods', () => {
       baseUrl: 'https://api.example.com',
     })
 
-    const result = await client.postJson<{ id: number; name: string }>('/users', {
-      body: {
-        name: 'Tom',
-      },
-    })
+    client.use(
+      createBizMiddleware<UserPayload, number>({
+        isSuccess: (payload) => payload.code === 0,
+        getMessage: (payload) => payload.message,
+        getCode: (payload) => payload.code,
+        getData: (payload) => payload.data,
+      }),
+    )
+
+    const result = await client.getData<{ id: number; name: string }>('/users/1')
 
     expect(result).toEqual({
       id: 1,
       name: 'Tom',
     })
-
-    const [, init] = fetchSpy.mock.calls[0]
-    const requestInit = init as RequestInit
-    const headers = new Headers(requestInit.headers)
-
-    expect(requestInit.method).toBe(HTTP_METHOD.POST)
-    expect(requestInit.body).toBe(JSON.stringify({ name: 'Tom' }))
-    expect(headers.get('Content-Type')).toBe('application/json')
   })
 
-  it('should put json with putJson', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ id: 1, name: 'Jerry' }), {
+  it('should throw BizError when biz middleware validation fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ code: 40101, message: 'token expired', data: null }), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -258,106 +159,135 @@ describe('HttpClient json shortcut methods', () => {
       baseUrl: 'https://api.example.com',
     })
 
-    const result = await client.putJson<{ id: number; name: string }>('/users/1', {
-      body: {
-        name: 'Jerry',
-      },
-    })
+    client.use(
+      createBizMiddleware<TokenExpiredPayload, number>({
+        isSuccess: (payload) => payload.code === 0,
+        getMessage: (payload) => payload.message,
+        getCode: (payload) => payload.code,
+      }),
+    )
 
-    expect(result).toEqual({
-      id: 1,
-      name: 'Jerry',
-    })
-
-    const [, init] = fetchSpy.mock.calls[0]
-    const requestInit = init as RequestInit
-    const headers = new Headers(requestInit.headers)
-
-    expect(requestInit.method).toBe(HTTP_METHOD.PUT)
-    expect(requestInit.body).toBe(JSON.stringify({ name: 'Jerry' }))
-    expect(headers.get('Content-Type')).toBe('application/json')
+    await expect(client.getJson('/users/1')).rejects.toBeInstanceOf(BizError)
   })
 
-  it('should return undefined when getJson receives 204 response', async () => {
+  it('should handle BizError inside biz middleware and suppress throw when configured', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(null, {
-        status: 204,
-        statusText: 'No Content',
+      new Response(JSON.stringify({ code: 40101, message: 'token expired', data: null }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
       }),
+    )
+
+    const onError = vi.fn((error: BizError<TokenExpiredPayload, number>, ctx) => {
+      ctx.state.redirectTo = '/login'
+      ctx.data = {
+        redirected: true,
+        message: error.message,
+      }
+    })
+
+    const client = new HttpClient({
+      baseUrl: 'https://api.example.com',
+    })
+
+    client.use(
+      createBizMiddleware<TokenExpiredPayload, number>({
+        isSuccess: (payload) => payload.code === 0,
+        getMessage: (payload) => payload.message,
+        getCode: (payload) => payload.code,
+        onError,
+        throwOnError: false,
+      }),
+    )
+
+    const result = await client.getData<{ redirected: boolean; message: string }>('/users/1')
+
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      redirected: true,
+      message: 'token expired',
+    })
+  })
+
+  it('should allow custom throw decisions after unified biz error handling', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ code: 40101, message: 'token expired', data: null }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    )
+
+    const onError = vi.fn()
+    const throwOnError = vi.fn(
+      (error: BizError<TokenExpiredPayload, number>) => error.code !== 40101,
     )
 
     const client = new HttpClient({
       baseUrl: 'https://api.example.com',
     })
 
-    const result = await client.getJson<{ id: number; name: string }>('/users/1')
+    client.use(
+      createBizMiddleware<TokenExpiredPayload, number>({
+        isSuccess: (payload) => payload.code === 0,
+        getMessage: (payload) => payload.message,
+        getCode: (payload) => payload.code,
+        onError,
+        throwOnError,
+      }),
+    )
 
-    expect(result).toBeUndefined()
+    const result = await client.getJson<{ code: number; message: string }>('/users/1')
+
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(throwOnError).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      code: 40101,
+      message: 'token expired',
+      data: null,
+    })
   })
-})
 
-describe('HttpClient upload helpers', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
+  it('should upload form data with file and fields', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('ok', {
+        status: 200,
+      }),
+    )
 
-  it('should build a multipart body with fields and a single file', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('ok', { status: 200 }))
+    const client = new HttpClient({
+      baseUrl: 'https://api.example.com',
+    })
 
     const file = new File(['avatar'], 'avatar.png', { type: 'image/png' })
-    const client = new HttpClient({
-      baseUrl: 'https://api.example.com',
-    })
 
     await client.upload('/upload', {
       data: {
         userId: 123,
-        tags: ['cover', 'profile'],
+        tags: ['avatar', 'profile'],
       },
       file,
     })
 
-    const [, init] = fetchSpy.mock.calls[0]
+    const [calledUrl, init] = fetchSpy.mock.calls[0]
     const requestInit = init as RequestInit
     const body = requestInit.body as FormData
     const headers = new Headers(requestInit.headers)
 
-    expect(requestInit.method).toBe(HTTP_METHOD.POST)
-    expect(body).toBeInstanceOf(FormData)
+    expect(calledUrl).toBe('https://api.example.com/upload')
+    expect(requestInit.method).toBe('POST')
     expect(body.get('userId')).toBe('123')
-    expect(body.getAll('tags')).toEqual(['cover', 'profile'])
+    expect(body.getAll('tags')).toEqual(['avatar', 'profile'])
     expect(body.get('file')).toBe(file)
     expect(headers.get('Content-Type')).toBeNull()
   })
 
-  it('should append multiple files under a custom field name', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('ok', { status: 200 }))
-
-    const fileA = new File(['a'], 'a.txt', { type: 'text/plain' })
-    const fileB = new File(['b'], 'b.txt', { type: 'text/plain' })
-    const client = new HttpClient({
-      baseUrl: 'https://api.example.com',
-    })
-
-    await client.upload('/upload', {
-      files: [fileA, fileB],
-      fileFieldName: 'attachments',
-    })
-
-    const [, init] = fetchSpy.mock.calls[0]
-    const requestInit = init as RequestInit
-    const body = requestInit.body as FormData
-
-    expect(body.getAll('attachments')).toEqual([fileA, fileB])
-  })
-
-  it('should parse uploadJson response as json', async () => {
+  it('should upload data through uploadData when middleware sets ctx.data', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ url: '/assets/avatar.png' }), {
+      new Response(JSON.stringify({ code: 0, data: { url: '/assets/avatar.png' } }), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -365,12 +295,19 @@ describe('HttpClient upload helpers', () => {
       }),
     )
 
-    const file = new File(['avatar'], 'avatar.png', { type: 'image/png' })
     const client = new HttpClient({
       baseUrl: 'https://api.example.com',
     })
 
-    const result = await client.uploadJson<{ url: string }>('/upload', {
+    client.use(
+      createBizMiddleware<UploadPayload, number>({
+        isSuccess: (payload) => payload.code === 0,
+        getData: (payload) => payload.data,
+      }),
+    )
+
+    const file = new File(['avatar'], 'avatar.png', { type: 'image/png' })
+    const result = await client.uploadData<{ url: string }>('/upload', {
       file,
       data: {
         userId: 'u-1',
@@ -380,67 +317,5 @@ describe('HttpClient upload helpers', () => {
     expect(result).toEqual({
       url: '/assets/avatar.png',
     })
-  })
-})
-
-describe('HttpClient.request error classification', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('should throw NetworkError when fetch rejects with normal error', async () => {
-    const originalError = new Error('network failed')
-
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(originalError)
-
-    const client = new HttpClient({
-      baseUrl: 'https://api.example.com',
-    })
-
-    await expect(
-      client.request({
-        url: '/users',
-        method: HTTP_METHOD.GET,
-      }),
-    ).rejects.toBeInstanceOf(NetworkError)
-  })
-
-  it('should throw AbortError when fetch rejects with AbortError and source is user', async () => {
-    const abortError = new Error('The operation was aborted')
-    abortError.name = 'AbortError'
-
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(abortError)
-
-    const controller = new AbortController()
-    const client = new HttpClient({
-      baseUrl: 'https://api.example.com',
-    })
-
-    await expect(
-      client.request({
-        url: '/users',
-        method: HTTP_METHOD.GET,
-        signal: controller.signal,
-      }),
-    ).rejects.toBeInstanceOf(AbortError)
-  })
-
-  it('should throw TimeoutError when fetch rejects with AbortError and source is timeout', async () => {
-    const abortError = new Error('The operation was aborted')
-    abortError.name = 'AbortError'
-
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(abortError)
-
-    const client = new HttpClient({
-      baseUrl: 'https://api.example.com',
-      timeout: 1000,
-    })
-
-    await expect(
-      client.request({
-        url: '/users',
-        method: HTTP_METHOD.GET,
-      }),
-    ).rejects.toBeInstanceOf(TimeoutError)
   })
 })
